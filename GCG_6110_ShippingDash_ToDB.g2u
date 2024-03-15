@@ -1,0 +1,501 @@
+﻿
+
+Program.Sub.Preflight.Start
+	V.Global.bRefresh.Declare
+	V.Global.bSecs.Declare
+	V.Global.iTimerMili.Declare
+	V.Global.iTimerMili2.Declare
+	V.Global.iTimerDiff.Declare
+	V.Global.iCnt.Declare
+	V.Global.iSecs.Declare
+	V.Global.bShip.Declare
+	V.Global.bLoadData.Declare
+	V.Global.bLongPart.Declare
+	V.Global.bUseShippingLocations.Declare
+	V.Global.bShippingOverride.Declare
+	V.Global.sShippingLocation.Declare
+
+	v.Global.bViewSO.Declare
+	v.Global.bShipOEPermission.Declare
+	v.Global.bShipSHIPPermission.Declare
+	v.Global.bSupDemView.Declare
+	v.Global.bSupDemEdit.Declare
+	v.Global.bSupDemNODollars.Declare
+	V.Global.bNotClick.Declare(Boolean, True)
+	'Program.External.Include.Library("PPT_Canny.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+	V.Local.sArt.Declare
+	V.Local.bShipGrp.Declare
+
+	'Canny
+	'F.Intrinsic.Control.CallSub(CannyCheckUser,"Form","frmShip")
+	
+	'Open DB Connection
+	F.ODBC.Connection!con.OpenCompanyConnection(500)
+	
+	
+	F.Intrinsic.Control.CallSub(CheckLongPart)
+	'F.Intrinsic.Control.CallSub(CheckShippingLocations)
+	
+	f.Intrinsic.Control.CallSub(GetUserFields)
+	
+	F.Intrinsic.Control.CallSub(LoadOpenOrders)
+
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+
+Program.Sub.CheckLongPart.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	F.Global.General.ReadOption("400861",0,False,"0000",V.Global.bLongPart)
+	
+	F.Intrinsic.Control.If(V.Global.bLongPart,=,False)
+		F.Global.General.ReadOption("400861",0,False,"0004",V.Global.bLongPart)
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.CheckLongPart.End
+
+Program.Sub.CheckShippingLocations.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	F.ODBC.Connection!con.ExecuteAndReturn("Select Cast(Case When F_BOOLEAN = 1 Then 1 Else 0 End As Bit) As UseShippingLocations From OP_HEADER Where ID = 401561 And Sequence = 0000;",V.Global.bUseShippingLocations)
+	F.Intrinsic.Control.If(V.Global.bUseShippingLocations)
+		'F.Intrinsic.Control.CallSub(GetUserOptions)
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.CheckShippingLocations.End
+
+
+
+
+Program.Sub.LoadOpenOrders.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	V.Local.sFilter.Declare
+	v.Local.sSQL.Declare
+	v.Local.sRet.Declare
+
+	F.Intrinsic.Control.If(V.DataTable.dtAllShip.Exists)
+		F.Data.DataTable.Close("dtAllShip")
+	F.Intrinsic.Control.EndIf
+	
+	V.Global.bLoadData.Set(True)
+	
+	 F.Data.DataTable.CreateFromSQL("dtAllShip0","con","Select Case When A.Pick_List_Printed = 'Y' Then 'RePrint' Else 'Print' End As PICKLIST,RTRIM(A.CUSTOMER) AS CUSTOMER,C.NAME_CUSTOMER,F.CUSTOMER_PO,A.ORDER_NO,LEFT(A.Record_NO,3) AS RECORD_NO,RTRIM(LTRIM(COALESCE(A.PART,''))) AS PART,'' As DISPLAY_PART,RTRIM(LTRIM(A.LOCATION)) AS LOCATION,A.PRODUCT_LINE,A.DESCRIPTION,A.WEIGHT,CASE WHEN A.FLAG_USE_MQD != 'Y' THEN A.QTY_BO WHEN FLAG_USE_MQD = 'Y' AND B.FLAG_CLOSED <> 'Y' THEN B.QTY_OPEN WHEN FLAG_USE_MQD = 'Y' AND B.FLAG_CLOSED = 'Y' THEN 0 END AS QTY_BO,COALESCE(D.QTY_ONHAND,0) AS QTY_ONHAND,COALESCE(D.QTY_REQUIRED,0) AS QTY_REQUIRED,CASE WHEN A.DATE_ORDER = '1900-01-01' THEN CONVERT(NULL, SQL_DATE) ELSE A.DATE_ORDER END AS DATE_ORDER,CASE WHEN A.FLAG_USE_MQD != 'Y' THEN IF(A.MUST_DLVR_BY_DATE = '1900-01-01', CONVERT(NULL, SQL_DATE), A.MUST_DLVR_BY_DATE) WHEN FLAG_USE_MQD = 'Y' THEN IF(B.CUST_DUE_DATE = '1900-01-01',CONVERT('9999-12-31',SQL_DATE),B.CUST_DUE_DATE) END AS MUST_DLVR_BY_DATE,CASE WHEN A.FLAG_USE_MQD != 'Y' THEN IF(A.DATE_ITEM_PROM = '1900-01-01', CONVERT(NULL, SQL_DATE), A.DATE_ITEM_PROM) WHEN FLAG_USE_MQD = 'Y' THEN IF(B.DATE_DUE = '1900-01-01',CONVERT('9999-12-31',SQL_DATE),B.DATE_DUE) END AS DATE_ITEM_PROM,A.SHIP_ID,E.CITY_SHIP,RTRIM(E.STATE_SHIP) AS STATE_SHIP,E.SHIP_VIA_SHIP,E.CARRIER_CD,'' AS CARR_SHORT_DESC,'' AS CARR_LONG_DESC,CONVERT(A.STAGED,SQL_BIT) AS STAGED,CASE WHEN FLAG_USE_MQD = 'Y' THEN 'Ship Schd' ELSE '-' END AS FLAG_USE_MQD,CASE WHEN F.SHP_HLD_FLAG = 02 OR F.SHP_HLD_FLAG = 04 THEN CONVERT(1,SQL_BIT) WHEN F.SHP_HLD_FLAG = NULL THEN CONVERT(0,SQL_BIT) ELSE CONVERT(0,SQL_BIT) END AS SHP_HLD_FLAG,A.QTY_SHIPPED,'' AS NOTES,RTRIM(A.USER_1) AS USER_1,RTRIM(A.USER_2) AS USER_2,RTRIM(A.USER_3) AS USER_3,RTRIM(A.USER_4) AS USER_4,RTRIM(A.USER_5) AS USER_5,Cast(Concat(A.Order_No,A.Record_No) as CHAR(10)) As ORDLN,E.CARRIER_CD+Cast(E.SHIP_SRVC_TYPE As Char(3)) As CSRV,A.CUSTOMER_PART, rtrim(D.CODE_SOURCE) as CODE_SOURCE, G.TEXT AS CUST_ORDER_NOTES,RTRIM(F.CODE_SORT) AS CODE_SORT,RTRIM(F.ORDER_SORT_2) AS ORDER_SORT_2,RTRIM(D.CODE_SORT) AS INV_CODE_SORT,RTRIM(F.CODE_FOB) AS CODE_FOB,F.SALESPERSON,RTRIM(CASE ORDER_TYPE WHEN 'B' THEN 'BLANKET' WHEN 'X' THEN 'INVOICE ONLY' ELSE ORDER_TYPE END) AS ORDER_TYPE,RTRIM(F.BLANKET_NO) AS BLANKET_NO, CAST(CASE WHEN F.FLAG_NO_BACKORDER = 'Y' THEN 1 ELSE 0 END AS BIT) AS FLAG_NO_BACKORDER FROM V_ORDER_LINES A LEFT JOIN V_OE_SHIP_SCHED B ON B.ORDER_NO = A.ORDER_NO AND B.ORDER_LINE = A.RECORD_NO LEFT JOIN V_CUSTOMER_MASTER C ON A.CUSTOMER = C.CUSTOMER LEFT JOIN V_INVENTORY_ALL D ON A.PART = D.PART AND A.LOCATION = D.LOCATION LEFT JOIN V_ORDER_SHIP_TO E ON E.ORDER_NO = A.ORDER_NO and E.SHIP_ID = A.SHIP_ID LEFT JOIN V_ORDER_HEADER F ON A.ORDER_NO = F.ORDER_NO LEFT OUTER JOIN V_CUST_ORDER_NOTES G ON C.CUSTOMER = G.CUSTOMER WHERE F.RECORD_NO = '  A' AND QTY_BO <> 0 AND LINE_TYPE <> 'P' ORDER BY DATE_ITEM_PROM, A.ORDER_NO, A.RECORD_NO;",True)
+			
+	'LONG PART NUMBER
+	f.Intrinsic.Control.If(v.Global.bLongPart)
+		F.Data.DataTable.AddDisplayPartColumn("dtAllShip0",0,"PART","DISPLAY_PART")
+	f.Intrinsic.Control.Else
+		f.Data.DataTable.CopyColumn("dtAllShip0","PART","DISPLAY_PART")
+	f.Intrinsic.Control.EndIf
+	
+	
+	'CUSTOMER NOTES
+	F.Data.Dictionary.CreateFromSQL("dNotes","con","Select Cast(Concat(SO,SOLINE) as CHAR(10)),RTrim(Notes) as Notes From GAB_4167_SO_NOTES;")
+	F.Data.Dictionary.SetDefaultReturn("dNotes","")
+	F.Data.DataTable.FillFromDictionary("dtAllShip0","dNotes","ORDLN","NOTES")
+	F.Data.Dictionary.Close("dNotes")
+	
+	F.Data.DataTable.CreateFromSQL("dtCarrDesc","con","Select Carrier_CD+Cast(Srvc_Type As Char(3)) As CSRV,RTrim(Short_Desc) As Short_Desc,RTrim(Long_Desc) As Long_Desc From OE_Carrier;")
+	F.Data.Dictionary.CreateFromDataTable("dShortDesc","dtCarrDesc","CSRV","Short_Desc")
+	F.Data.Dictionary.CreateFromDataTable("dLongDesc","dtCarrDesc","CSRV","Long_Desc")
+	F.Data.Dictionary.SetDefaultReturn("dShortDesc","")
+	F.Data.Dictionary.SetDefaultReturn("dLongDesc","")
+	F.Data.DataTable.FillFromDictionary("dtAllShip0","dShortDesc","CSRV","CARR_SHORT_DESC")
+	F.Data.DataTable.FillFromDictionary("dtAllShip0","dLongDesc","CSRV","CARR_LONG_DESC")
+	F.Data.Dictionary.Close("dShortDesc")
+	F.Data.Dictionary.Close("dLongDesc")
+	F.Data.DataTable.Close("dtCarrDesc")
+	
+	'STATUS Column
+	F.Data.DataTable.AddColumn("dtAllShip0","STATUS",String,"")
+	
+	'Create DataView and filter out locations
+	F.Intrinsic.Control.If(V.Global.bUseShippingLocations)
+		F.Intrinsic.Control.If(V.Global.bShippingOverride)
+			V.Local.sFilter.Set("")
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Build("LOCATION = '{0}'",V.Global.sShippingLocation,V.Local.sFilter)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Else
+		V.Local.sFilter.Set("")
+	F.Intrinsic.Control.EndIf
+	F.Data.DataView.Create("dtAllShip0","dvAllShip",22,V.Local.sFilter,"")
+	
+	'Convert DV to DT
+	F.Data.DataView.ToDataTable("dtAllShip0","dvAllShip","dtAllShip",True)
+	F.Data.DataTable.Close("dtAllShip0")
+	
+	v.Local.sSQL.Set("Select * from GCG_6110_SETTINGS")
+	f.ODBC.Connection!Con.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	
+	
+
+	F.Intrinsic.Control.If(v.Local.sRet.trim,<>,"No")
+		F.Intrinsic.Control.CallSub(CalculateMaterial)
+	F.Intrinsic.Control.EndIf
+	
+	'Remove Columns	
+	F.Data.DataTable.RemoveColumn("dtAllShip","ORDLN")
+	F.Data.DataTable.RemoveColumn("dtAllShip","CSRV")
+	
+	v.Local.sSQL.Set("Delete from GCG_6110_SaveShippingDash_ToDB")
+	f.ODBC.Connection!con.Execute(v.Local.sSQL)
+	
+	f.Data.Datatable.SaveToDB("dtAllShip","con","GCG_6110_SaveShippingDash_ToDB","",128)
+	
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.LoadOpenOrders.End
+
+
+
+Program.Sub.CheckNote.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	V.Local.sFilter.Declare
+	
+	'dtAllShip
+	F.Intrinsic.String.Build("ORDER_NO = '{0}' AND RECORD_NO = '{1}'",V.Args.OrderNo,V.Args.OrderLine,V.Local.sFilter)
+	F.Data.DataView.Create("dtAllShip","dvNote",22,V.Local.sFilter,"")
+	F.Data.DataView.SetValue("dtAllShip","dvNote",-1,V.Args.FieldName,V.Args.Text)
+	F.Data.DataView.Close("dtAllShip","dvNote")
+	
+	'dtDueShip
+	F.Intrinsic.String.Build("ORDER_NO = '{0}' AND RECORD_NO = '{1}'",V.Args.OrderNo,V.Args.OrderLine,V.Local.sFilter)
+	F.Data.DataView.Create("dtDueShip","dvNote",22,V.Local.sFilter,"")
+	F.Data.DataView.SetValue("dtDueShip","dvNote",-1,V.Args.FieldName,V.Args.Text)
+	F.Data.DataView.Close("dtDueShip","dvNote")
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.CheckNote.End
+
+
+Program.Sub.CalculateMaterial.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	V.Local.iCnt.Declare
+	V.Local.fMrpQty.Declare
+	V.Local.fQty.Declare
+	V.Local.fNewQty.Declare
+	V.Local.sSelect.Declare
+	V.Local.sSelect2.Declare
+	V.Local.sExp.Declare
+	v.Local.sPart.Declare
+	v.Local.sLoc.Declare
+	V.Local.sSQL.Declare
+	V.Local.iRet.Declare
+	V.Local.sRet.Declare
+
+	
+	v.Local.sSQL.Set("Select * from GCG_6110_SETTINGS")
+	f.ODBC.Connection!Con.ExecuteAndReturn(v.Local.sSQL,v.Local.sRet)
+	
+	F.Intrinsic.Control.If(v.Local.sRet.trim,=,"RunningToTal")
+		'Run through MRP for parts with no allocations
+		F.Data.DataView.Create("dtAllShip","dvMRP",22,"","Part,Location")
+		F.Data.DataView.ToDataTableDistinct("dtAllShip","dvMRP","dtMRP","PART*!*LOCATION*!*QTY_ONHAND",True)
+		F.Data.DataTable.AddColumn("dtMRP","NEW_ONHAND",Float)
+		F.Data.DataTable.CopyColumn("dtMRP","Qty_OnHand","NEW_ONHAND")
+		F.Data.DataView.Close("dtAllShip","dvMRP")
+	
+		F.Data.DataTable.Select("dtAllShip","Qty_OnHand <> 0",V.Local.sSelect)
+		F.Intrinsic.Control.If(V.Local.sSelect,<>,"***NORETURN***")
+			F.Intrinsic.String.Split(V.Local.sSelect,"*!*",V.Local.sSelect)
+			F.Intrinsic.Control.If(V.Local.sSelect.UBound,<>,0)
+				
+			F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.For(V.Local.iCnt,0,V.Local.sSelect.UBound,1)
+				
+			
+				'V.Local.sPart.Set(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).PART!FieldValTrim)
+				V.Local.sPart.Set(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).PART!FieldValTrim)
+				'V.Local.sLoc.Set(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).LOCATION!FieldValTrim)
+				V.Local.sLoc.Set(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).LOCATION!FieldValTrim)
+				F.Intrinsic.String.Build("Part = '{0}' And Location = '{1}'",v.Local.sPart.PSQLFriendly,v.Local.sLoc.PSQLFriendly,V.Local.sExp)
+				F.Data.DataTable.Select("dtMRP",V.Local.sExp,V.Local.sSelect2)
+				F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(V.Local.iCnt).Long,"QTY_ONHAND",V.DataTable.dtMRP(V.Local.sSelect2.Long).NEW_ONHAND!FieldVal)
+				'F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).QTY_BO!FieldValFloat,<=,V.DataTable.dtMRP(V.Local.sSelect2.Long).NEW_ONHAND!FieldVal)
+				F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).QTY_BO!FieldValFloat,<=,V.DataTable.dtMRP(V.Local.sSelect2.Long).NEW_ONHAND!FieldVal)
+				'F.Intrinsic.Control.AndIf(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).SHP_HLD_FLAG!FieldVal,<>,True)
+				F.Intrinsic.Control.AndIf(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).SHP_HLD_FLAG!FieldVal,<>,True)
+					'F.Intrinsic.Math.Sub(V.DataTable.dtMRP(V.Local.sSelect2.Long).NEW_ONHAND!FieldVal,V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).QTY_BO!FieldValFloat,V.Local.fNewQty)
+					F.Intrinsic.Math.Sub(V.DataTable.dtMRP(V.Local.sSelect2.Long).NEW_ONHAND!FieldVal,V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).QTY_BO!FieldValFloat,V.Local.fNewQty)
+					F.Intrinsic.Control.If(V.Local.fNewQty,<=,0)
+						F.Data.DataTable.SetValue("dtMRP",V.Local.sSelect2.Long,"NEW_ONHAND",0)
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.SetValue("dtMRP",V.Local.sSelect2.Long,"NEW_ONHAND",V.Local.fNewQty)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+					'F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt).Long).SHP_HLD_FLAG!FieldVal,=,True)
+					F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt)).SHP_HLD_FLAG!FieldVal,=,True)
+						'F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(V.Local.iCnt).Long,"QTY_ONHAND",0)
+						F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(V.Local.iCnt),"QTY_ONHAND",0)
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.SetValue("dtMRP",V.Local.sSelect2.Long,"NEW_ONHAND",0)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Next(V.Local.iCnt)
+		F.Intrinsic.Control.EndIf
+		
+		F.Data.DataTable.Close("dtMRP")
+	F.Intrinsic.Control.Else
+		'MRP for Allocated Parts Numbers
+		F.Intrinsic.Control.CallSub(CalculateMaterialAllocations)
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End
+
+	F.Intrinsic.Control.EndTry
+Program.Sub.CalculateMaterial.End
+
+Program.Sub.CalculateMaterialAllocations.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	V.Local.sAllocType.Declare
+	V.Local.sSQL.Declare
+	V.Local.iCnt.Declare
+	V.Local.iCnt2.Declare
+	V.Local.sExp.Declare
+	V.Local.sSelect.Declare
+	V.Local.sSelect2.Declare
+	V.Local.fQty.Declare
+	V.Local.sPart.Declare
+	V.Local.sLoc.Declare
+	V.Local.fQtyAlloc.Declare
+	V.Local.fQtyRem.Declare
+	V.Local.fQtyNewOnHand.Declare
+	V.Local.iSign.Declare
+	
+	F.Intrinsic.Control.If(V.DataTable.dtCustSOAlloc.Exists)
+		F.Data.DataTable.Close("dtCustSOAlloc")
+	F.Intrinsic.Control.EndIf
+
+	'Get Allocation Type from OP_HEADER
+	F.ODBC.Connection!con.ExecuteAndReturn("Select Case F_LONG When 1 Then 'LOT' When 2 Then 'HEAT' When 3 Then 'SERIAL_NUMBER' Else 'NONE' End As ALLOC_TYPE From Op_Header Where ID = 401187 And SEQUENCE = 0000;",V.Local.sAllocType)
+	F.Intrinsic.Control.If(V.Local.sAllocType,=,"NONE")
+		F.Intrinsic.UI.Msgbox("There is no allocation type set.","Check Inventory Options")
+		F.Intrinsic.Control.End
+	F.Intrinsic.Control.EndIf
+	
+	'Set Qty On Hand to 0 for all lines
+	F.Data.DataTable.SetValue("dtAllShip",-1,"Qty_OnHand",0)
+	
+	'Get Sales Order allocations
+	
+	F.Intrinsic.String.Build("Select Part, Location, Sum(Quantity) As Quantity, Case When POSITION('-',{0}) <> 0 And LOCATE('-',{0},POSITION('-',{0})+1) <> 0 Then SUBSTRING({0},0,POSITION('-',{0}))+SUBSTRING({0},LOCATE('-',{0},POSITION('-',{0})+1)+1,LENGTH({0})) Else Replace({0},'-','') End As {0} From V_Item_Master Where Allocated = 'Y' And Quantity > 0 And Alloc_Type = 'S' And {0} <> '' OR Allocated = 'Y' And Quantity > 0 And Alloc_Type = 'T' And {0} <> '' Group By Part, Location, {0} Order By Part, Location;",V.Local.sAllocType,V.Local.sSQL)
+	F.Data.DataTable.CreateFromSQL("dtCustSOAlloc","con",V.Local.sSQL,True)
+	F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtCustSOAlloc.RowCount--,1)
+		V.Local.sPart.Set(V.DataTable.dtCustSOAlloc(V.Local.iCnt).Part!FieldValTrim)
+		V.Local.sLoc.Set(V.DataTable.dtCustSOAlloc(V.Local.iCnt).Location!FieldValTrim)
+		F.Intrinsic.String.Build("Part = '{0}' And Location = '{1}' And ORDLN = '{2}'",V.Local.sPart.PSQLFriendly,V.Local.sLoc.PSQLFriendly,V.DataTable.dtCustSOAlloc(V.Local.iCnt).[V.Local.sAllocType]!FieldValTrim,V.Local.sExp)
+		F.Data.DataTable.Select("dtAllShip",V.Local.sExp,V.Local.sSelect)
+		F.Intrinsic.Control.If(V.Local.sSelect.IsNotNoReturn)
+			F.Intrinsic.String.Split(V.Local.sSelect,"*!*",V.Local.sSelect)
+			F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(0),"Qty_OnHand",V.DataTable.dtCustSOAlloc(V.Local.iCnt).Quantity!FieldVal)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.iCnt)
+	F.Data.DataTable.Close("dtCustSOAlloc")
+	
+	'Get Customer allocations
+	
+	
+	F.Intrinsic.String.Build("Select Part, Location, Quantity, {0} From V_Item_Master Where Allocated = 'Y' And Quantity > 0 And Alloc_Type = 'C' And {0} <> '' Order By Part, Location;",V.Local.sAllocType,V.Local.sSQL)
+	F.Data.DataTable.CreateFromSQL("dtCustSOAlloc","con",V.Local.sSQL,True)
+	F.Intrinsic.Control.If(V.DataTable.dtCustSOAlloc.RowCount,<>,0)
+		
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtCustSOAlloc.RowCount--,1)
+		
+		V.Local.sPart.Set(V.DataTable.dtCustSOAlloc(V.Local.iCnt).Part!FieldValTrim)
+		V.Local.sLoc.Set(V.DataTable.dtCustSOAlloc(V.Local.iCnt).Location!FieldValTrim)
+		F.Intrinsic.String.Build("Part = '{0}' And Location = '{1}' And CUSTOMER = '{2}'",V.Local.sPart.PSQLFriendly,V.Local.sLoc.PSQLFriendly,V.DataTable.dtCustSOAlloc(V.Local.iCnt).[V.Local.sAllocType]!FieldValTrim,V.Local.sExp)
+		F.Data.DataTable.Select("dtAllShip",V.Local.sExp,V.Local.sSelect)
+		F.Intrinsic.Control.If(V.Local.sSelect.IsNotNoReturn)
+			F.Intrinsic.String.Split(V.Local.sSelect,"*!*",V.Local.sSelect)
+			V.Local.fQtyAlloc.Set(V.DataTable.dtCustSOAlloc(V.Local.iCnt).Quantity!FieldVal)
+			F.Intrinsic.Control.For(V.Local.iCnt2,0,V.Local.sSelect.UBound,1)
+				F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt2)).Qty_BO!FieldVal,<>,V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt2)).Qty_OnHand!FieldVal)
+					F.Intrinsic.Control.If(V.Local.fQtyAlloc,<>,0)
+						F.Intrinsic.Math.Sub(V.Local.fQtyAlloc,V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt2)).Qty_BO!FieldVal,V.Local.fQtyRem)
+						F.Intrinsic.Math.Sgn(V.Local.fQtyRem,V.Local.iSign)
+						F.Intrinsic.Control.If(V.Local.iSign,=,1)
+							V.Local.fQtyAlloc.Set(V.Local.fQtyRem)
+							V.Local.fQtyNewOnHand.Set(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt2)).Qty_BO!FieldVal)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.Math.Add(V.DataTable.dtAllShip(V.Local.sSelect(V.Local.iCnt2)).Qty_OnHand!FieldVal,V.Local.fQtyAlloc,V.Local.fQtyNewOnHand)
+							V.Local.fQtyAlloc.Set(0)
+						F.Intrinsic.Control.EndIf
+						F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(V.Local.iCnt2),"Qty_OnHand",V.Local.fQtyNewOnHand)
+					F.Intrinsic.Control.Else
+						'Set Value
+						F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect(V.Local.iCnt2),"Qty_OnHand",0)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Next(V.Local.iCnt2)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.iCnt)
+	F.Data.DataTable.Close("dtCustSOAlloc")
+	
+	'Run through the remaining inventory and allocate to SO Lines
+	
+	'F.Data.DataTable.CreateFromSQL("dtCustSOAlloc","con","Select V_Inventory_Mstr.Part, V_Inventory_Mstr.Location, V_Inventory_Mstr.Part+V_Inventory_Mstr.Location As PartLoc, Case When (Select Sum(Quantity) From V_Item_Master Where V_Inventory_Mstr.Part = V_Item_Master.Part And V_Inventory_Mstr.Location = V_Item_Master.Location And Allocated = 'Y' And Quantity > 0) Is Null Then Qty_OnHand Else Qty_OnHand-(Select Sum(Quantity) From V_Item_Master Where V_Inventory_Mstr.Part = V_Item_Master.Part And V_Inventory_Mstr.Location = V_Item_Master.Location And Allocated = 'Y' And Quantity > 0) End As QtyAvail From V_Inventory_Mstr Where Case When (Select Sum(Quantity) From V_Item_Master Where V_Inventory_Mstr.Part = V_Item_Master.Part And V_Inventory_Mstr.Location = V_Item_Master.Location And Allocated = 'Y' And Quantity > 0) Is Null Then Qty_OnHand Else Qty_OnHand-(Select Sum(Quantity) From V_Item_Master Where V_Inventory_Mstr.Part = V_Item_Master.Part And V_Inventory_Mstr.Location = V_Item_Master.Location And Allocated = 'Y' And Quantity > 0) End > 0 Order By Part, Location;",True)
+	F.Data.DataTable.CreateFromSQL("dtCustSOAlloc","con","Select Part, Location, RTrim(Part)+RTrim(Location) As PartLoc, Qty_OnHand From V_Inventory_Mstr Where Qty_OnHand > 0 Order By Part, Location;",True)
+	
+	'Fill Item Master Quantity
+	F.Data.DataTable.AddColumn("dtCustSOAlloc","Item_Qty_OnHand",Float,0.0)
+	F.Data.Dictionary.CreateFromSQL("dItemQtyOnHand","con","Select Part+Location As PartLoc, Sum(Quantity) As Item_Qty_OnHand From V_Item_Master Where Allocated = 'Y' And Quantity > 0 Group By Part, Location Order By Part, Location;")
+	F.Data.Dictionary.SetDefaultReturn("dItemQtyOnHand",0.0)
+	F.Data.DataTable.FillFromDictionary("dtCustSOAlloc","dItemQtyOnHand","PartLoc","Item_Qty_OnHand")
+	F.Data.Dictionary.Close("dItemQtyOnHand")
+	
+	'Calculate QtyAvail
+	F.Data.DataTable.AddExpressionColumn("dtCustSOAlloc","QtyAvail",Float,"[Qty_OnHand]-[Item_Qty_OnHand]")
+	
+	'Get Parts in Shipping Dashboard
+	
+	F.Intrinsic.Control.CallSub(GetPartsInDashboard)
+	F.Intrinsic.Control.If(V.Args.PartLocs.IsNotNoReturn)
+		F.Intrinsic.String.Build("PartLoc In ({0})",V.Args.PartLocs,V.Local.sExp)
+		F.Data.DataTable.Select("dtCustSOAlloc",V.Local.sExp,V.Local.sSelect)
+		F.Intrinsic.Control.If(V.Local.sSelect.IsNotNoReturn)
+			F.Intrinsic.String.Split(V.Local.sSelect,"*!*",V.Local.sSelect)
+			F.Intrinsic.Control.If(V.Local.sSelect.UBound,<>,0)
+			
+			F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.For(V.Local.iCnt,0,V.Local.sSelect.UBound,1)
+				
+				V.Local.sPart.Set(V.DataTable.dtCustSOAlloc(V.Local.sSelect(V.Local.iCnt)).Part!FieldValTrim)
+				V.Local.sLoc.Set(V.DataTable.dtCustSOAlloc(V.Local.sSelect(V.Local.iCnt)).Location!FieldValTrim)
+				F.Intrinsic.String.Build("Part = '{0}' And Location = '{1}'",V.Local.sPart.PSQLFriendly,V.Local.sLoc.PSQLFriendly,V.Local.sExp)
+				F.Data.DataTable.Select("dtAllShip",V.Local.sExp,V.Local.sSelect2)
+				F.Intrinsic.Control.If(V.Local.sSelect.IsNotNoReturn)
+					F.Intrinsic.String.Split(V.Local.sSelect2,"*!*",V.Local.sSelect2)
+					V.Local.fQtyAlloc.Set(V.DataTable.dtCustSOAlloc(V.Local.sSelect(V.Local.iCnt)).QtyAvail!FieldVal)
+					F.Intrinsic.Control.For(V.Local.iCnt2,0,V.Local.sSelect2.UBound,1)
+						F.Intrinsic.Control.If(V.DataTable.dtAllShip(V.Local.sSelect2(V.Local.iCnt2)).Qty_BO!FieldVal,>,V.DataTable.dtAllShip(V.Local.sSelect2(V.Local.iCnt2)).Qty_OnHand!FieldVal)
+							F.Intrinsic.Control.If(V.Local.fQtyAlloc,<>,0)
+								F.Intrinsic.Math.Sub(V.Local.fQtyAlloc,V.DataTable.dtAllShip(V.Local.sSelect2(V.Local.iCnt2)).Qty_BO!FieldVal,V.Local.fQtyRem)
+								F.Intrinsic.Math.Sgn(V.Local.fQtyRem,V.Local.iSign)
+								F.Intrinsic.Control.If(V.Local.iSign,=,1)
+									V.Local.fQtyAlloc.Set(V.Local.fQtyRem)
+									V.Local.fQtyNewOnHand.Set(V.DataTable.dtAllShip(V.Local.sSelect2(V.Local.iCnt2)).Qty_BO!FieldVal)
+								F.Intrinsic.Control.Else
+									F.Intrinsic.Math.Add(V.DataTable.dtAllShip(V.Local.sSelect2(V.Local.iCnt2)).Qty_OnHand!FieldVal,V.Local.fQtyAlloc,V.Local.fQtyNewOnHand)
+									V.Local.fQtyAlloc.Set(0)
+								F.Intrinsic.Control.EndIf
+								F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect2(V.Local.iCnt2),"Qty_OnHand",V.Local.fQtyNewOnHand)
+							F.Intrinsic.Control.Else
+								'Set Value
+								F.Data.DataTable.SetValue("dtAllShip",V.Local.sSelect2(V.Local.iCnt2),"Qty_OnHand",0)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Next(V.Local.iCnt2)
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Next(V.Local.iCnt)
+			F.Data.DataTable.Close("dtCustSOAlloc")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End
+	F.Intrinsic.Control.EndTry
+Program.Sub.CalculateMaterialAllocations.End
+
+Program.Sub.GetPartsInDashboard.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+
+	V.Local.iCnt.Declare
+	V.Local.sPart.Declare
+	V.Local.sLoc.Declare
+	V.Local.sPartLocs.Declare
+	
+	F.Intrinsic.Control.If(V.DataTable.dtPartLocs.Exists)
+		F.Data.DataTable.Close("dtPartLocs")
+	F.Intrinsic.Control.EndIf
+	
+	F.Data.DataView.Create("dtAllShip","dvPartLocs",22,"","Part,Location")
+	F.Data.DataView.ToDataTableDistinct("dtAllShip","dvPartLocs","dtPartLocs","PART*!*LOCATION",True)
+	
+	F.Intrinsic.Control.If(V.DataTable.dtPartLocs.RowCount,<>,0)
+		F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtPartLocs.RowCount--,1)
+			V.Local.sPart.Set(V.DataTable.dtPartLocs(V.Local.iCnt).Part!FieldVal)
+			V.Local.sLoc.Set(V.DataTable.dtPartLocs(V.Local.iCnt).Location!FieldVal)
+			F.Intrinsic.Control.If(V.Local.iCnt,=,0)
+				F.Intrinsic.String.Build("'{0}{1}'",V.Local.sPart.PSQLFriendly,V.Local.sLoc.PSQLFriendly,V.Local.sPartLocs)
+			F.Intrinsic.Control.Else
+				F.Intrinsic.String.Build("{0},'{1}{2}'",V.Local.sPartLocs,V.Local.sPart.PSQLFriendly,V.Local.sLoc.PSQLFriendly,V.Local.sPartLocs)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Next(V.Local.iCnt)
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.If(V.Local.sPartLocs.Trim,=,"")
+		F.Intrinsic.Variable.AddRV("PartLocs","***NORETURN***")
+	F.Intrinsic.Control.Else
+		F.Intrinsic.Variable.AddRV("PartLocs",V.Local.sPartLocs)
+	F.Intrinsic.Control.EndIf
+
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.GetPartsInDashboard.End
+
+Program.Sub.GetUserFields.Start
+v.Local.sSql.Declare(String)
+
+v.Local.sSql.Set("Select KEY_ID, LABEL from V_OE_USER_FLDS_LN")
+f.Data.DataTable.CreateFromSQL("dtUserFields","con",v.Local.sSql,True)
+
+f.Intrinsic.Control.ExitSub
+
+
+Program.Sub.GetUserFields.End
+
+Program.Sub.Comments.Start
+${$5$}$2.0.0.0$}$2
+${$6$}$bpham$}$20210208102939623$}$Di0riF4Q5RIv6jxva5zSWDOOsXP37NsomyUJ0/pAZLM3hwVZXLrFBSgy/0PtHmophVB4Aztsd5k=
+Program.Sub.Comments.End
