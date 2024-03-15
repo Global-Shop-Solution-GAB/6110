@@ -1,0 +1,102 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create(BaseForm)
+Gui.Form..Caption("Calculate MRP On Hand")
+Gui.Form..Size(311,126)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MousePointer(0)
+Gui.Form..Sizeable(False)
+Gui.Form..AlwaysOnTop(False)
+Gui.Form..FontName("Tahoma")
+Gui.Form..FontSize(8.25)
+Gui.Form..ControlBox(True)
+Gui.Form..MaxButton(True)
+Gui.Form..MinButton(True)
+Gui.Form..Moveable(True)
+Gui.Form..ShowInTaskBar(True)
+Gui.Form..TitleBar(True)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.optNo.Create(Option)
+Gui.Form.optNo.Size(155,19)
+Gui.Form.optNo.Position(17,9)
+Gui.Form.optNo.Caption("No")
+Gui.Form.optNo.Enabled(True)
+Gui.Form.optNo.Visible(True)
+Gui.Form.optNo.Zorder(0)
+Gui.Form.optNo.FontName("Tahoma")
+Gui.Form.optNo.FontSize(8.25)
+Gui.Form.optRunningTot.Create(Option)
+Gui.Form.optRunningTot.Size(248,20)
+Gui.Form.optRunningTot.Position(17,37)
+Gui.Form.optRunningTot.Caption("Running Total")
+Gui.Form.optRunningTot.Enabled(True)
+Gui.Form.optRunningTot.Visible(True)
+Gui.Form.optRunningTot.Zorder(0)
+Gui.Form.optRunningTot.FontName("Tahoma")
+Gui.Form.optRunningTot.FontSize(8.25)
+Gui.Form.optAllocations.Create(Option)
+Gui.Form.optAllocations.Size(173,21)
+Gui.Form.optAllocations.Position(17,64)
+Gui.Form.optAllocations.Caption("Allocations, No Running Total")
+Gui.Form.optAllocations.Enabled(True)
+Gui.Form.optAllocations.Visible(True)
+Gui.Form.optAllocations.Zorder(0)
+Gui.Form.optAllocations.FontName("Tahoma")
+Gui.Form.optAllocations.FontSize(8.25)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+v.Global.sRet.Declare
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+v.Local.sSQL.Declare
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+f.ODBC.Connection!Con.OpenCompanyConnection
+v.Local.sSQL.Set("Select * from GCG_6110_SETTINGS;")
+f.ODBC.Connection!Con.ExecuteAndReturn(v.local.sSQL,v.Global.sRet)
+f.Intrinsic.Control.If(v.Global.sRet.Trim,=,"No")
+	gui.Form.optNo.Value(true)
+f.Intrinsic.Control.ElseIf(v.Global.sRet.Trim,=,"RunningToTal")
+	gui.Form.optRunningTot.Value(true)
+f.Intrinsic.Control.ElseIf(v.Global.sRet.Trim,=,"Allocations")
+	gui.Form.optAllocations.Value(true)
+f.Intrinsic.Control.EndIf
+gui.Form..Show
+Program.Sub.Main.End
+Program.Sub.Form_UnLoad.Start
+v.Local.sSQL.Declare
+v.Local.sSettings.Declare
+
+f.Intrinsic.Control.If(v.Screen.Form!optNo.Value,=,True)
+	v.Local.sSettings.Set("No")
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Control.If(v.Screen.Form!optRunningTot.Value,=,True)
+	v.Local.sSettings.Set("RunningToTal")
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Control.If(v.Screen.Form!optAllocations.Value,=,True)
+	v.Local.sSettings.Set("Allocations")
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Control.If(v.Global.sRet.Trim,=,"")
+	f.Intrinsic.String.Build("Insert into GCG_6110_SETTINGS values('{0}')",v.Local.sSettings,v.Local.sSQL)
+f.Intrinsic.Control.Else
+	f.Intrinsic.String.Build("Update GCG_6110_SETTINGS set SETTINGS = ('{0}')",v.Local.sSettings,v.Local.sSQL)
+f.Intrinsic.Control.EndIf
+
+f.ODBC.Connection!Con.Execute(v.local.sSQL)
+
+f.Intrinsic.UI.Msgbox("Settings saved!","Notification")
+
+f.ODBC.Connection!Con.Close
+f.Intrinsic.Control.End
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$bpham$}$20200922190201248$}$Di0riF4Q5RIv6jxva5zSWHQka3gtjpYgJLdJwOkMLllAJQ2bCHzS1/wTMZZBK1v+cv0WoY71Tnc=
+Program.Sub.Comments.End
